@@ -8,6 +8,16 @@ export interface MappedFormErrors<TField extends string> {
   formError?: string;
 }
 
+/** Converts Zod issues to the same `{ field, message }` shape the server sends. */
+export function toValidationIssues(
+  issues: readonly { path: readonly PropertyKey[]; message: string }[],
+): ValidationIssue[] {
+  return issues.map((issue) => ({
+    field: issue.path.map(String).join('.'),
+    message: issue.message,
+  }));
+}
+
 /**
  * Splits validation issues (from the server's 400 response or a client-side
  * Zod parse) into per-field messages, keeping the first message per field.

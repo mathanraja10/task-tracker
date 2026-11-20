@@ -17,6 +17,9 @@ logs/
 *.log
 npm-debug.log*
 
+# Browser automation artifacts
+.playwright-mcp/
+
 # Editor / OS
 .vscode/*
 !.vscode/extensions.json
