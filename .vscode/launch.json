@@ -1,0 +1,99 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Server: dev (watch)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "autoAttachChildProcesses": true,
+      "restart": true,
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "name": "Server: start (no watch)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/server",
+      "runtimeArgs": ["--import", "tsx"],
+      "program": "${workspaceFolder}/server/src/server.ts",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "name": "Server: seed",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/server",
+      "runtimeArgs": ["--import", "tsx"],
+      "program": "${workspaceFolder}/server/src/scripts/seed.ts",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "name": "Server: test current file",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/server",
+      "program": "${workspaceFolder}/server/node_modules/vitest/vitest.mjs",
+      "args": [
+        "run",
+        "${fileBasenameNoExtension}",
+        "--no-file-parallelism",
+        "--testTimeout=3600000"
+      ],
+      "autoAttachChildProcesses": true,
+      "smartStep": true,
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "name": "Server: test all",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/server",
+      "program": "${workspaceFolder}/server/node_modules/vitest/vitest.mjs",
+      "args": ["run", "--no-file-parallelism", "--testTimeout=3600000"],
+      "autoAttachChildProcesses": true,
+      "smartStep": true,
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "name": "Server: attach",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "restart": true,
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "name": "Client: Chrome",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/client",
+      "preLaunchTask": "client: dev",
+      "skipFiles": ["**/node_modules/**"]
+    },
+    {
+      "name": "Client: Edge",
+      "type": "msedge",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/client",
+      "preLaunchTask": "client: dev",
+      "skipFiles": ["**/node_modules/**"]
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full stack (server + Chrome)",
+      "configurations": ["Server: dev (watch)", "Client: Chrome"],
+      "stopAll": true
+    }
+  ]
+}
