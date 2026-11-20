@@ -1,0 +1,6 @@
+{
+  "name": "team-task-bug-tracker",
+  "private": true,
+  "type": "module",
+  "description": "Vercel root: serves client/dist statically and the Express API from api/index.js"
+}
