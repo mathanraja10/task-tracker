@@ -8,9 +8,20 @@ import { TaskFilterBar } from './TaskFilterBar';
 import { TaskList } from './TaskList';
 
 export function TaskBoard() {
-  const { filters, setStatus, setPriority, clearFilters, hasActiveFilters } = useTaskFilters();
+  const {
+    filters,
+    searchInput,
+    setSearchInput,
+    setStatus,
+    setPriority,
+    clearFilters,
+    hasActiveFilters,
+  } = useTaskFilters();
   const tasksQuery = useTasks(filters);
-  const taskCount = tasksQuery.data?.length;
+  const loadedCount = tasksQuery.data?.length;
+  // Only loaded pages are counted, so show "20+" while more pages exist.
+  const countLabel =
+    loadedCount === undefined ? undefined : `${loadedCount}${tasksQuery.hasNextPage ? '+' : ''}`;
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-8">
@@ -30,19 +41,21 @@ export function TaskBoard() {
           <h2 id="tasks-heading" className="text-base font-semibold text-slate-900">
             Tasks
           </h2>
-          {taskCount !== undefined && (
+          {countLabel !== undefined && (
             <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700 tabular-nums">
-              {taskCount}
+              {countLabel}
             </span>
           )}
-          {tasksQuery.isFetching && !tasksQuery.isPending && (
+          {tasksQuery.isFetching && !tasksQuery.isPending && !tasksQuery.isFetchingNextPage && (
             <Spinner label="Refreshing tasks" className="text-slate-400" />
           )}
         </div>
 
         <TaskFilterBar
           filters={filters}
+          searchInput={searchInput}
           hasActiveFilters={hasActiveFilters}
+          onSearchChange={setSearchInput}
           onStatusChange={setStatus}
           onPriorityChange={setPriority}
           onClear={clearFilters}
@@ -55,6 +68,10 @@ export function TaskBoard() {
           isShowingStaleData={tasksQuery.isPlaceholderData}
           isRefetching={tasksQuery.isRefetching}
           hasActiveFilters={hasActiveFilters}
+          hasNextPage={tasksQuery.hasNextPage}
+          isFetchingNextPage={tasksQuery.isFetchingNextPage}
+          nextPageError={tasksQuery.isFetchNextPageError ? tasksQuery.error : null}
+          onLoadMore={() => void tasksQuery.fetchNextPage()}
           onRetry={() => void tasksQuery.refetch()}
           onClearFilters={clearFilters}
         />

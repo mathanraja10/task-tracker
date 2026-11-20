@@ -1,7 +1,7 @@
 import { z, type ZodType } from 'zod';
 
 import { env } from '@/config/env';
-import type { ApiErrorBody, ApiSuccess, ValidationIssue } from '@/types/api';
+import type { ApiErrorBody, ApiPage, ApiSuccess, PageMeta, ValidationIssue } from '@/types/api';
 
 const validationIssueSchema = z.object({ field: z.string(), message: z.string() });
 
@@ -15,7 +15,12 @@ const errorBodySchema = z.object({
 const successEnvelopeSchema = z.object({
   data: z.unknown(),
   message: z.string().optional(),
+  meta: z.unknown().optional(),
 });
+
+const pageMetaSchema = z.object({
+  nextCursor: z.string().nullable(),
+}) satisfies ZodType<PageMeta>;
 
 /** Normalized error for every failed API call. `status` is 0 for network failures. */
 export class ApiError extends Error {
@@ -70,10 +75,20 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
-export async function apiRequest<T>(
+const UNEXPECTED_RESPONSE = 'Received an unexpected response from the server.';
+
+type SuccessEnvelope = z.infer<typeof successEnvelopeSchema>;
+
+interface RawSuccess {
+  status: number;
+  /** `data` and `meta` are not yet checked against the endpoint's contract. */
+  envelope: SuccessEnvelope;
+}
+
+async function send(
   path: string,
-  { method = 'GET', body, query, signal, schema }: RequestOptions<T>,
-): Promise<ApiSuccess<T>> {
+  { method = 'GET', body, query, signal }: Omit<RequestOptions<unknown>, 'schema'>,
+): Promise<RawSuccess> {
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
 
@@ -103,16 +118,36 @@ export async function apiRequest<T>(
   }
 
   const envelope = successEnvelopeSchema.safeParse(json);
-  if (!envelope.success) {
-    throw new ApiError('Received an unexpected response from the server.', response.status);
-  }
-  const data = schema.safeParse(envelope.data.data);
-  if (!data.success) {
-    throw new ApiError('Received an unexpected response from the server.', response.status);
-  }
+  if (!envelope.success) throw new ApiError(UNEXPECTED_RESPONSE, response.status);
+  return { status: response.status, envelope: envelope.data };
+}
 
-  const { message } = envelope.data;
-  return message === undefined ? { data: data.data } : { data: data.data, message };
+/** Parses `value` against the response contract, failing like any other API error. */
+function parseContract<T>(schema: ZodType<T>, value: unknown, status: number): T {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) throw new ApiError(UNEXPECTED_RESPONSE, status);
+  return parsed.data;
+}
+
+export async function apiRequest<T>(
+  path: string,
+  { schema, ...options }: RequestOptions<T>,
+): Promise<ApiSuccess<T>> {
+  const { status, envelope } = await send(path, options);
+  const data = parseContract(schema, envelope.data, status);
+  return envelope.message === undefined ? { data } : { data, message: envelope.message };
+}
+
+/** GET a cursor-paginated list. `schema` validates a single item. */
+export async function apiGetPage<T>(
+  path: string,
+  { schema, ...options }: Omit<RequestOptions<T>, 'method' | 'body'>,
+): Promise<ApiPage<T>> {
+  const { status, envelope } = await send(path, { ...options, method: 'GET' });
+  return {
+    data: parseContract(z.array(schema), envelope.data, status),
+    meta: parseContract(pageMetaSchema, envelope.meta, status),
+  };
 }
 
 type MethodOptions<T> = Omit<RequestOptions<T>, 'method'>;
@@ -120,6 +155,7 @@ type MethodOptions<T> = Omit<RequestOptions<T>, 'method'>;
 export const apiClient = {
   get: <T>(path: string, options: Omit<MethodOptions<T>, 'body'>) =>
     apiRequest(path, { ...options, method: 'GET' }),
+  getPage: apiGetPage,
   post: <T>(path: string, options: MethodOptions<T>) =>
     apiRequest(path, { ...options, method: 'POST' }),
   patch: <T>(path: string, options: MethodOptions<T>) =>

@@ -1,30 +1,34 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { isTaskPriority, isTaskStatus } from '../constants/task.constants';
+import {
+  isTaskPriority,
+  isTaskStatus,
+  SEARCH_DEBOUNCE_MS,
+  TASK_LIMITS,
+} from '../constants/task.constants';
 import type { TaskFilters, TaskPriority, TaskStatus } from '../types/task.types';
 
-/** Drops unset keys so `{}` and `{ status: undefined }` share a cache entry. */
-function compactFilters({ status, priority }: TaskFilters): TaskFilters {
-  return {
-    ...(status && { status }),
-    ...(priority && { priority }),
-  };
-}
+type SelectFilters = Pick<TaskFilters, 'status' | 'priority'>;
 
-/** Reads filters from `?status=&priority=`, ignoring unknown values. */
-function readFiltersFromUrl(): TaskFilters {
+const URL_KEYS = ['status', 'priority', 'q'] as const;
+
+/** Reads `?status=&priority=&q=`, ignoring unknown values. */
+function readUrl(): { selects: SelectFilters; search: string } {
   const params = new URLSearchParams(window.location.search);
   const status = params.get('status') ?? '';
   const priority = params.get('priority') ?? '';
-  return compactFilters({
-    ...(isTaskStatus(status) && { status }),
-    ...(isTaskPriority(priority) && { priority }),
-  });
+  return {
+    selects: {
+      ...(isTaskStatus(status) && { status }),
+      ...(isTaskPriority(priority) && { priority }),
+    },
+    search: (params.get('q') ?? '').slice(0, TASK_LIMITS.SEARCH_MAX),
+  };
 }
 
-function writeFiltersToUrl(filters: TaskFilters): void {
+function writeUrl(filters: TaskFilters): void {
   const url = new URL(window.location.href);
-  for (const key of ['status', 'priority'] as const) {
+  for (const key of URL_KEYS) {
     const value = filters[key];
     if (value) url.searchParams.set(key, value);
     else url.searchParams.delete(key);
@@ -32,27 +36,74 @@ function writeFiltersToUrl(filters: TaskFilters): void {
   window.history.replaceState(window.history.state, '', url);
 }
 
-/** Filter state persisted in the URL so filtered views survive reloads and can be shared. */
+/** Returns `value` once it has stopped changing for `delayMs`. */
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebounced(value);
+    }, delayMs);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [value, delayMs]);
+  return debounced;
+}
+
+/**
+ * Filter and search state, persisted in the URL so filtered views survive
+ * reloads and can be shared.
+ *
+ * `searchInput` is the raw text box value; `filters.q` is its trimmed,
+ * debounced version, so typing doesn't send a request per keystroke.
+ */
 export function useTaskFilters() {
-  const [filters, setFilters] = useState<TaskFilters>(readFiltersFromUrl);
+  const [initial] = useState(readUrl);
+  const [selects, setSelects] = useState<SelectFilters>(initial.selects);
+  const [searchInput, setSearchInput] = useState(initial.search);
+
+  const trimmedSearch = searchInput.trim();
+  const debouncedSearch = useDebouncedValue(trimmedSearch, SEARCH_DEBOUNCE_MS);
+  // Clearing the search applies immediately; only typing is debounced.
+  const q = trimmedSearch === '' ? '' : debouncedSearch;
+
+  const { status, priority } = selects;
+  // Unset keys are omitted so equivalent filters share one cache entry.
+  const filters = useMemo<TaskFilters>(
+    () => ({
+      ...(status && { status }),
+      ...(priority && { priority }),
+      ...(q && { q }),
+    }),
+    [status, priority, q],
+  );
 
   useEffect(() => {
-    writeFiltersToUrl(filters);
+    writeUrl(filters);
   }, [filters]);
 
-  const setStatus = useCallback((status: TaskStatus | undefined) => {
-    setFilters((prev) => compactFilters({ ...prev, status }));
+  const setStatus = useCallback((value: TaskStatus | undefined) => {
+    setSelects((prev) => ({ ...prev, status: value }));
   }, []);
 
-  const setPriority = useCallback((priority: TaskPriority | undefined) => {
-    setFilters((prev) => compactFilters({ ...prev, priority }));
+  const setPriority = useCallback((value: TaskPriority | undefined) => {
+    setSelects((prev) => ({ ...prev, priority: value }));
   }, []);
 
   const clearFilters = useCallback(() => {
-    setFilters({});
+    setSelects({});
+    setSearchInput('');
   }, []);
 
-  const hasActiveFilters = filters.status !== undefined || filters.priority !== undefined;
+  const hasActiveFilters = status !== undefined || priority !== undefined || trimmedSearch !== '';
 
-  return { filters, setStatus, setPriority, clearFilters, hasActiveFilters };
+  return {
+    filters,
+    searchInput,
+    setSearchInput,
+    setStatus,
+    setPriority,
+    clearFilters,
+    hasActiveFilters,
+  };
 }

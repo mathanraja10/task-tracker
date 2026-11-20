@@ -14,8 +14,6 @@ export const taskSchema = z.object({
   updatedAt: z.iso.datetime(),
 }) satisfies ZodType<Task>;
 
-export const taskListSchema = z.array(taskSchema);
-
 export const deleteTaskResultSchema = z.object({
   id: z.string(),
 }) satisfies ZodType<DeleteTaskResult>;

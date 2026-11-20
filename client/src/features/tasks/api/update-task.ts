@@ -5,6 +5,7 @@ import { apiClient } from '@/lib/api-client';
 import { taskSchema } from '../schemas/task.schema';
 import type { Task, UpdateTaskPayload } from '../types/task.types';
 
+import { mapCachedTasks, type TaskListData } from './task-list-cache';
 import { taskKeys } from './task.keys';
 
 export interface UpdateTaskVariables {
@@ -13,7 +14,7 @@ export interface UpdateTaskVariables {
 }
 
 interface UpdateTaskContext {
-  snapshots: [QueryKey, Task[] | undefined][];
+  snapshots: [QueryKey, TaskListData | undefined][];
 }
 
 export async function updateTask({ id, changes }: UpdateTaskVariables): Promise<Task> {
@@ -36,10 +37,13 @@ export function useUpdateTask() {
     mutationFn: updateTask,
     onMutate: async ({ id, changes }) => {
       await queryClient.cancelQueries({ queryKey: taskKeys.lists() });
-      const snapshots = queryClient.getQueriesData<Task[]>({ queryKey: taskKeys.lists() });
+      const snapshots = queryClient.getQueriesData<TaskListData>({ queryKey: taskKeys.lists() });
 
-      queryClient.setQueriesData<Task[]>({ queryKey: taskKeys.lists() }, (tasks) =>
-        tasks?.map((task) => (task.id === id ? { ...task, ...changes } : task)),
+      queryClient.setQueriesData<TaskListData>(
+        { queryKey: taskKeys.lists() },
+        mapCachedTasks((tasks) =>
+          tasks.map((task) => (task.id === id ? { ...task, ...changes } : task)),
+        ),
       );
 
       return { snapshots };

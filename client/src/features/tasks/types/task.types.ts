@@ -1,3 +1,5 @@
+import type { ApiPage } from '@/types/api';
+
 import type { TASK_PRIORITIES, TASK_STATUSES } from '../constants/task.constants';
 
 export type TaskStatus = (typeof TASK_STATUSES)[number];
@@ -31,7 +33,12 @@ export type UpdateTaskPayload =
 export interface TaskFilters {
   status?: TaskStatus;
   priority?: TaskPriority;
+  /** Case-insensitive substring match on title or description. */
+  q?: string;
 }
+
+/** One page of GET /api/tasks. */
+export type TaskPage = ApiPage<Task>;
 
 export interface DeleteTaskResult {
   id: string;

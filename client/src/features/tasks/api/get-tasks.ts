@@ -1,26 +1,36 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
 
 import { apiClient } from '@/lib/api-client';
 
-import { taskListSchema } from '../schemas/task.schema';
-import type { Task, TaskFilters } from '../types/task.types';
+import { taskSchema } from '../schemas/task.schema';
+import type { TaskFilters, TaskPage } from '../types/task.types';
 
 import { taskKeys } from './task.keys';
 
-export async function getTasks(filters: TaskFilters, signal?: AbortSignal): Promise<Task[]> {
-  const response = await apiClient.get('/tasks', {
-    query: { status: filters.status, priority: filters.priority },
-    schema: taskListSchema,
+export async function getTasks(
+  filters: TaskFilters,
+  cursor: string | undefined,
+  signal?: AbortSignal,
+): Promise<TaskPage> {
+  return apiClient.getPage('/tasks', {
+    query: { status: filters.status, priority: filters.priority, q: filters.q, cursor },
+    schema: taskSchema,
     ...(signal && { signal }),
   });
-  return response.data;
 }
 
-/** Server-side filtered task list. Keeps showing the previous list while a new filter loads. */
+/**
+ * Server-side filtered, cursor-paginated task list. Each filter combination
+ * has its own cache entry; the previous list stays visible while a new one loads.
+ */
 export function useTasks(filters: TaskFilters) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: taskKeys.list(filters),
-    queryFn: ({ signal }) => getTasks(filters, signal),
+    queryFn: ({ pageParam, signal }) => getTasks(filters, pageParam, signal),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.meta.nextCursor ?? undefined,
+    // Flatten pages so components only ever see a list of tasks.
+    select: (data) => data.pages.flatMap((page) => page.data),
     placeholderData: keepPreviousData,
   });
 }

@@ -3,8 +3,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 
 import { deleteTaskResultSchema } from '../schemas/task.schema';
-import type { DeleteTaskResult, Task } from '../types/task.types';
+import type { DeleteTaskResult } from '../types/task.types';
 
+import { mapCachedTasks, type TaskListData } from './task-list-cache';
 import { taskKeys } from './task.keys';
 
 export async function deleteTask(id: string): Promise<DeleteTaskResult> {
@@ -24,8 +25,9 @@ export function useDeleteTask() {
   return useMutation({
     mutationFn: deleteTask,
     onSuccess: ({ id }) => {
-      queryClient.setQueriesData<Task[]>({ queryKey: taskKeys.lists() }, (tasks) =>
-        tasks?.filter((task) => task.id !== id),
+      queryClient.setQueriesData<TaskListData>(
+        { queryKey: taskKeys.lists() },
+        mapCachedTasks((tasks) => tasks.filter((task) => task.id !== id)),
       );
       return queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
     },

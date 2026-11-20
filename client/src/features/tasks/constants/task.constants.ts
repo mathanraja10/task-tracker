@@ -11,7 +11,11 @@ export const TASK_LIMITS = {
   TITLE_MIN: 3,
   TITLE_MAX: 100,
   DESCRIPTION_MAX: 500,
+  SEARCH_MAX: 100,
 } as const;
+
+/** Delay between the last keystroke and the search request. */
+export const SEARCH_DEBOUNCE_MS = 300;
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
   todo: 'To do',

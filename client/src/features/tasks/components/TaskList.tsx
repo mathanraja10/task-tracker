@@ -17,6 +17,11 @@ interface TaskListProps {
   isShowingStaleData: boolean;
   isRefetching: boolean;
   hasActiveFilters: boolean;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  /** Set when loading the next page failed; the loaded tasks stay visible. */
+  nextPageError: Error | null;
+  onLoadMore: () => void;
   onRetry: () => void;
   onClearFilters: () => void;
 }
@@ -48,6 +53,10 @@ export function TaskList({
   isShowingStaleData,
   isRefetching,
   hasActiveFilters,
+  hasNextPage,
+  isFetchingNextPage,
+  nextPageError,
+  onLoadMore,
   onRetry,
   onClearFilters,
 }: TaskListProps) {
@@ -76,7 +85,7 @@ export function TaskList({
     return hasActiveFilters ? (
       <EmptyState
         title="No matching tasks"
-        description="No tasks match the selected filters. Try a different status or priority."
+        description="No tasks match your search and filters. Try different terms or clear them."
         action={
           <Button variant="secondary" onClick={onClearFilters}>
             Clear filters
@@ -92,15 +101,35 @@ export function TaskList({
   }
 
   return (
-    <ul
-      aria-busy={isShowingStaleData || undefined}
-      className={cn('space-y-3 transition-opacity', isShowingStaleData && 'opacity-60')}
-    >
-      {tasks.map((task) => (
-        <li key={task.id}>
-          <TaskCard task={task} />
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-4">
+      <ul
+        aria-busy={isShowingStaleData || undefined}
+        className={cn('space-y-3 transition-opacity', isShowingStaleData && 'opacity-60')}
+      >
+        {tasks.map((task) => (
+          <li key={task.id}>
+            <TaskCard task={task} />
+          </li>
+        ))}
+      </ul>
+
+      {hasNextPage && (
+        <div className="flex flex-col items-center gap-2">
+          {nextPageError && (
+            <p role="alert" className="text-sm font-medium text-rose-600">
+              Couldn&apos;t load more tasks. {getErrorMessage(nextPageError)}
+            </p>
+          )}
+          <Button
+            variant="secondary"
+            onClick={onLoadMore}
+            isLoading={isFetchingNextPage}
+            disabled={isShowingStaleData}
+          >
+            {isFetchingNextPage ? 'Loading…' : nextPageError ? 'Try again' : 'Load more'}
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }
