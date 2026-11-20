@@ -49,7 +49,13 @@ const taskSchema = new Schema<TaskAttributes>(
   },
 );
 
-// Supports the filtered, newest-first list query.
-taskSchema.index({ status: 1, priority: 1, createdAt: -1 });
+// The list query sorts by `createdAt DESC, _id DESC` and pages with a keyset
+// range on the same two fields. Each index serves one filter combination
+// without an in-memory sort. Text search (`?q`) is an unanchored regex, so it
+// is applied as a filter while one of these indexes is scanned in order.
+taskSchema.index({ createdAt: -1, _id: -1 });
+taskSchema.index({ status: 1, createdAt: -1, _id: -1 });
+taskSchema.index({ priority: 1, createdAt: -1, _id: -1 });
+taskSchema.index({ status: 1, priority: 1, createdAt: -1, _id: -1 });
 
 export const TaskModel = model<TaskAttributes>('Task', taskSchema);

@@ -1,7 +1,7 @@
 import type { RequestHandler } from 'express';
 
 import * as taskService from '../services/task.service.js';
-import type { ApiSuccess } from '../types/api.types.js';
+import type { ApiPage, ApiSuccess } from '../types/api.types.js';
 import type { TaskResponse } from '../types/task.types.js';
 import type {
   CreateTaskInput,
@@ -22,10 +22,10 @@ interface TaskIdParams {
 
 type NoParams = Record<string, string>;
 
-export const listTasks: RequestHandler<NoParams, ApiSuccess<TaskResponse[]>, unknown, ListTasksQuery> =
+export const listTasks: RequestHandler<NoParams, ApiPage<TaskResponse>, unknown, ListTasksQuery> =
   async (req, res) => {
-    const tasks = await taskService.listTasks(req.query);
-    res.status(200).json({ data: tasks });
+    const { tasks, nextCursor } = await taskService.listTasks(req.query);
+    res.status(200).json({ data: tasks, meta: { nextCursor } });
   };
 
 export const createTask: RequestHandler<NoParams, ApiSuccess<TaskResponse>, CreateTaskInput> =

@@ -8,7 +8,7 @@ A full-stack tracker for logging tasks and bugs, filtering them by status or pri
 
 ## Project structure
 
-```
+```text
 ├── server/                 Express REST API
 │   └── src/
 │       ├── config/         env validation (Zod), DB connection
@@ -40,7 +40,7 @@ A full-stack tracker for logging tasks and bugs, filtering them by status or pri
 
 ## Architecture overview
 
-```
+```text
 Browser (React SPA, :5173)
   │  TanStack Query hooks ──► typed API client ──► Zod-parses every response
   │
@@ -69,11 +69,8 @@ On the client, server data is kept only in the TanStack Query cache. Active filt
 ## Prerequisites
 
 - **Node.js 20.19+** (22 LTS recommended) and npm
-- **MongoDB**: a local instance or a free [MongoDB Atlas](https://www.mongodb.com/atlas) cluster
+- **MongoDB**: a local instance or a free [MongoDB Atlas](https://www.mongodb.com/atlas) cluster  
   *(not needed for the test suite, which uses an in-memory MongoDB)*
-
-> **Windows:** clone into a path **without `&`** (e.g. `C:\dev\team-task-bug-tracker`).
-> npm runs scripts through `cmd.exe`, which treats `&` as a command separator, so every `npm run` command fails inside such a folder.
 
 ---
 
@@ -148,7 +145,7 @@ cd client && npm run build && npm run preview    # static build on :4173 (proxie
 
 ```bash
 cd server
-npm test            # 27 integration tests (Vitest + Supertest)
+npm test            # 47 integration tests (Vitest + Supertest)
 npm run typecheck
 npm run lint
 npm run build
@@ -159,28 +156,16 @@ npm run lint
 npm run build
 ```
 
-Tests run against **mongodb-memory-server**, so no database setup is needed and your real data is never touched. Each test file gets an isolated database. The first run downloads a MongoDB binary (several hundred MB on Windows); later runs use the cache and finish in a few seconds.
+Tests run against **mongodb-memory-server**, so no database setup is needed and your real data is never touched. Each test file gets an isolated database. The first run downloads a MongoDB binary; later runs use the cache and finish in a few seconds.
 
 **Coverage includes** every case required by the brief, plus edge cases:
 
 - `POST` → `201` with saved fields and defaults; `400` for missing / short / long / whitespace-only title, long description, invalid enums, malformed JSON
 - `PATCH` → status and priority updates; `404` for unknown **and** malformed ids; `400` for empty body or disallowed fields
 - `GET` → status, priority and combined filters; newest-first ordering; `400` for invalid filter values
+- Pagination → walks every page with no gaps or duplicates (including tasks sharing a `createdAt`), stays stable when tasks are added mid-pagination, applies filters on every page; `400` for bad `limit` or a tampered `cursor`
+- Search → case-insensitive partial matches on title or description, regex metacharacters matched literally, combined with filters and pagination; `400` over 100 characters
 - `DELETE` → confirmation response; `404` for unknown and malformed ids
-
-There is no root `package.json`, so run each command inside `server/` or `client/`.
-
----
-
-## Debugging in VS Code
-
-`.vscode/launch.json` contains ready-made configurations (Run and Debug panel, <kbd>F5</kbd>):
-
-- **Server: dev (watch)**: debugs `npm run dev` and re-attaches after every hot restart
-- **Server: test current file** / **Server: test all**: debugs Vitest with the timeout raised so breakpoints don't fail tests
-- **Server: seed**: debugs the seeder
-- **Client: Chrome / Edge**: starts Vite, then opens the browser with breakpoints mapped to `client/src`
-- **Full stack (server + Chrome)**: starts both together and stops them together
 
 ---
 
@@ -190,7 +175,7 @@ Base URL: `/api`
 
 | Method | Endpoint | Body / Query | Success | Errors |
 |---|---|---|---|---|
-| `GET` | `/tasks` | `?status=todo\|in_progress\|done` `&priority=low\|medium\|high` | `200` | `400` invalid filter |
+| `GET` | `/tasks` | `?status=todo\|in_progress\|done` `&priority=low\|medium\|high` `&q=` `&limit=1–100` (default 20) `&cursor=` | `200` | `400` invalid filter, limit or cursor |
 | `POST` | `/tasks` | `{ title, description?, status?, priority? }` | `201` + `Location` | `400` validation |
 | `PATCH` | `/tasks/:id` | `{ status?, priority? }` (at least one) | `200` | `400` validation · `404` |
 | `DELETE` | `/tasks/:id` | — | `200` | `404` |
@@ -203,6 +188,10 @@ Base URL: `/api`
 ```jsonc
 // Success
 { "data": { "id": "…", "title": "…", "status": "todo", "priority": "medium", "createdAt": "…", "updatedAt": "…" } }
+
+// List (one page, newest first). Pass meta.nextCursor back as ?cursor= with the
+// same filters for the next page; it is null on the last page.
+{ "data": [ /* tasks */ ], "meta": { "nextCursor": "eyJjcmVhdGVkQXQiOi…" } }
 
 // Delete
 { "message": "Task deleted successfully", "data": { "id": "…" } }
@@ -220,22 +209,8 @@ Base URL: `/api`
 - **Malformed ObjectIds return `404`, not `400`**, as the brief requires. A route guard rejects them before they reach the database.
 - **End-to-end type safety.** Strict TypeScript and zero `any` (enforced by ESLint `no-explicit-any`). The client validates every API response with Zod at runtime, so a contract mismatch shows up as a clear error instead of `undefined` in the UI.
 - **Server state via TanStack Query.** Filters are sent to the server and stored in the URL, so filtered views can be shared and survive a reload. Status changes are **optimistic** and roll back on failure. Deletes are confirmed with the server before the card disappears, so any error appears on the card itself.
+- **Cursor (keyset) pagination.** Each page continues strictly after the last task of the previous one in `createdAt DESC, _id DESC` order. Unlike `skip`/offset, cost stays constant however deep you page, and tasks created or deleted between requests never cause skipped or repeated items. The cursor is an opaque base64url token, validated on the way in, so a tampered cursor is a `400`, not a crash. The client uses `useInfiniteQuery` with a "Load more" button; optimistic updates and deletes edit every loaded page in place.
+- **Substring search.** `?q=` is an escaped, case-insensitive regex over title and description, so partial words match ("logi" finds "login") and user input can never act as a pattern. Input is debounced (300 ms) on the client and stored in the URL with the other filters.
 - **Form errors from either side.** The client mirrors the server's Zod rules for instant feedback. If the server still returns `400`, its `details` are mapped onto the matching form fields.
 - **Accessibility.** Labelled controls, `aria-invalid` and `aria-describedby` wiring, live regions for status messages, and status and priority shown with text or icons as well as colour.
 
----
-
-## Trade-offs (3-hour time box)
-
-1. **Types are duplicated instead of shared.** The task enums, limits and types are defined in both `server/` and `client/` rather than in a shared package. This keeps the two packages independent and the tooling simple, but the definitions can drift apart. That risk is reduced, but not removed, by the client's runtime Zod validation of API responses, which fails loudly on any mismatch. With more time I would publish a shared `@tracker/contracts` package, or generate the client types from an OpenAPI spec.
-2. **No pagination, authentication or client tests.** `GET /tasks` returns every matching task, which is fine at team scale but would need cursor pagination for large datasets. There are no users or authentication, as the brief doesn't define them. Automated tests cover the API thoroughly; the UI was verified manually in a browser, and component tests (Vitest + Testing Library) would be the next addition.
-3. **Two independent packages with no root orchestrator.** The client and server each have their own install, lockfile and scripts, and there is no root `npm run dev` or `npm test`. This avoids npm-workspace hoisting problems and lets each side be deployed on its own. The cost is two `npm install`s and two terminals during development. A small root script (or Docker Compose) to start both would be the first convenience to add.
-
----
-
-## Possible next steps
-
-- Cursor-based pagination and text search
-- Authentication, task assignees and an activity history
-- Client component and end-to-end tests (Testing Library, Playwright)
-- Docker Compose for one-command local setup; CI running typecheck, lint and tests

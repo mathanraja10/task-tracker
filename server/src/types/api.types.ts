@@ -8,6 +8,17 @@ export interface ApiSuccess<T> {
   message?: string;
 }
 
+export interface PageMeta {
+  /** Opaque token for the next page, or `null` on the last page. */
+  nextCursor: string | null;
+}
+
+/** A cursor-paginated list response. */
+export interface ApiPage<T> {
+  data: T[];
+  meta: PageMeta;
+}
+
 export interface ApiError {
   error: {
     message: string;

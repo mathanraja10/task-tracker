@@ -13,3 +13,11 @@ export const TASK_LIMITS = {
   TITLE_MAX: 100,
   DESCRIPTION_MAX: 500,
 } as const;
+
+export const TASK_LIST_LIMITS = {
+  /** Page size when `?limit` is omitted. */
+  DEFAULT_PAGE_SIZE: 20,
+  MAX_PAGE_SIZE: 100,
+  /** Longest accepted `?q` search term. */
+  SEARCH_MAX: 100,
+} as const;
