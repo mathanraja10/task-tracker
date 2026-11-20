@@ -38,6 +38,34 @@ A full-stack tracker for logging tasks and bugs, filtering them by status or pri
 
 ---
 
+## Architecture overview
+
+```
+Browser (React SPA, :5173)
+  │  TanStack Query hooks ──► typed API client ──► Zod-parses every response
+  │
+  │  /api/*  (Vite dev proxy → :5000)
+  ▼
+Express app (:5000)
+  helmet · cors · json body parser
+  │
+  ├─ routes/          map URL + method to a handler
+  ├─ middlewares/     validate(body|query) with Zod · ObjectId guard (→ 404)
+  ├─ controllers/     read the parsed request, shape the HTTP response
+  ├─ services/        all data access and business rules
+  └─ models/          Mongoose schema (constraints mirror the Zod rules)
+  │
+  └─ error-handler    one place that turns every error into { error: { message, details } }
+  ▼
+MongoDB
+```
+
+A request travels in one direction: it is validated before any controller runs, controllers never touch the database, and every failure (Zod, Mongoose, unknown id, unexpected exception) ends up in the central error handler, so all errors share one JSON shape.
+
+On the client, server data is kept only in the TanStack Query cache. Active filters live in the URL query string, and each filter combination has its own cache entry. Mutations update the cache optimistically or invalidate it after a successful response.
+
+---
+
 ## Prerequisites
 
 - **Node.js 20.19+** (22 LTS recommended) and npm
@@ -123,8 +151,9 @@ cd server
 npm test            # 27 integration tests (Vitest + Supertest)
 npm run typecheck
 npm run lint
+npm run build
 
-cd client
+cd ../client
 npm run typecheck
 npm run lint
 npm run build
@@ -138,6 +167,20 @@ Tests run against **mongodb-memory-server**, so no database setup is needed and 
 - `PATCH` → status and priority updates; `404` for unknown **and** malformed ids; `400` for empty body or disallowed fields
 - `GET` → status, priority and combined filters; newest-first ordering; `400` for invalid filter values
 - `DELETE` → confirmation response; `404` for unknown and malformed ids
+
+There is no root `package.json`, so run each command inside `server/` or `client/`.
+
+---
+
+## Debugging in VS Code
+
+`.vscode/launch.json` contains ready-made configurations (Run and Debug panel, <kbd>F5</kbd>):
+
+- **Server: dev (watch)**: debugs `npm run dev` and re-attaches after every hot restart
+- **Server: test current file** / **Server: test all**: debugs Vitest with the timeout raised so breakpoints don't fail tests
+- **Server: seed**: debugs the seeder
+- **Client: Chrome / Edge**: starts Vite, then opens the browser with breakpoints mapped to `client/src`
+- **Full stack (server + Chrome)**: starts both together and stops them together
 
 ---
 
@@ -186,6 +229,7 @@ Base URL: `/api`
 
 1. **Types are duplicated instead of shared.** The task enums, limits and types are defined in both `server/` and `client/` rather than in a shared package. This keeps the two packages independent and the tooling simple, but the definitions can drift apart. That risk is reduced, but not removed, by the client's runtime Zod validation of API responses, which fails loudly on any mismatch. With more time I would publish a shared `@tracker/contracts` package, or generate the client types from an OpenAPI spec.
 2. **No pagination, authentication or client tests.** `GET /tasks` returns every matching task, which is fine at team scale but would need cursor pagination for large datasets. There are no users or authentication, as the brief doesn't define them. Automated tests cover the API thoroughly; the UI was verified manually in a browser, and component tests (Vitest + Testing Library) would be the next addition.
+3. **Two independent packages with no root orchestrator.** The client and server each have their own install, lockfile and scripts, and there is no root `npm run dev` or `npm test`. This avoids npm-workspace hoisting problems and lets each side be deployed on its own. The cost is two `npm install`s and two terminals during development. A small root script (or Docker Compose) to start both would be the first convenience to add.
 
 ---
 
